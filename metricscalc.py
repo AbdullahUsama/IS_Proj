@@ -33,12 +33,5 @@ def psnr_for_images(original_path, stego_path):
     psnr_value = calculate_psnr(original, stego)
     print(f"PSNR between {original_path} and {stego_path}: {psnr_value:.4f} dB")
 
-# -----------------------------
-# Original PSNR calculation
-# -----------------------------
 psnr_for_images("media/tyla.jpg", "media/stego_image.png")
-
-# -----------------------------
-# New image PSNR calculation
-# -----------------------------
 psnr_for_images("media/burger.jpg", "media/stego_image_2.png")

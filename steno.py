@@ -1,31 +1,27 @@
 import sys
 import os
 from PIL import Image
-from cryptography.fernet import Fernet
-import base64
-import hashlib
+from AESCTR import aes_gcm_encrypt_with_password, aes_gcm_decrypt_with_password
 
 class SteganographyLSB:
     def __init__(self):
         self.PIXELS_PER_CHAR = 3
-    
-    def _generate_key(self, password):
-        digest = hashlib.sha256(password.encode()).digest()
-        return base64.urlsafe_b64encode(digest[:32])
 
     def encrypt_message(self, plain_text, password):
-        key = self._generate_key(password)
-        f = Fernet(key)
-        encrypted_bytes = f.encrypt(plain_text.encode())
-        return encrypted_bytes.decode('utf-8')
+        """
+        Encrypts message using AES-256-GCM with password-based key derivation
+        Includes authentication tag for tamper detection
+        """
+        return aes_gcm_encrypt_with_password(plain_text, password)
 
     def decrypt_message(self, cipher_text, password):
+        """
+        Decrypts AES-256-GCM encrypted message
+        Verifies authentication tag - detects corruption/tampering
+        """
         try:
-            key = self._generate_key(password)
-            f = Fernet(key)
-            decrypted_bytes = f.decrypt(cipher_text.encode('utf-8'))
-            return decrypted_bytes.decode('utf-8')
-        except Exception:
+            return aes_gcm_decrypt_with_password(cipher_text, password)
+        except Exception as e:
             return "[!] Error: Incorrect Key or Corrupted Data"
 
     def _int_to_bin(self, rgb):

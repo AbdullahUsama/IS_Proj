@@ -1,6 +1,9 @@
-from Crypto.Cipher import AES
-from Crypto.Random import get_random_bytes
+from Cryptodome.Cipher import AES
+from Cryptodome.Random import get_random_bytes
+from Cryptodome.Protocol.KDF import PBKDF2
+from Cryptodome.Hash import SHA256, HMAC
 import os
+import base64
 
 # -----------------------------
 # Utility Functions
@@ -45,35 +48,61 @@ def aes_ctr_decrypt(ciphertext, key, nonce):
     return plaintext
 
 # -----------------------------
-# Example: Text Encryption/Decryption
+# Password-based Key Derivation
 # -----------------------------
-text = b"Sensitive information that needs AES-CTR protection."
-
-key, nonce, ciphertext = aes_ctr_encrypt(text)
-print("Ciphertext (hex):", ciphertext.hex())
-
-decrypted_text = aes_ctr_decrypt(ciphertext, key, nonce)
-print("Decrypted Text:", decrypted_text.decode())
+def derive_key_from_password(password, salt=b'steganography_salt_2025', key_length=32):
+    """
+    Derives a cryptographic key from a password using PBKDF2
+    password: string password
+    salt: bytes salt (should be unique per application)
+    key_length: 16 (AES-128), 24 (AES-192), 32 (AES-256)
+    Returns: derived key
+    """
+    key = PBKDF2(password.encode(), salt, key_length, count=100000, hmac_hash_module=SHA256)
+    return key
 
 # -----------------------------
-# Example: File Encryption/Decryption
+# AES-GCM with Password (Authenticated Encryption)
 # -----------------------------
-input_file = "media/burger.jpg"
-output_encrypted = "media/burger_encrypted.bin"
-output_decrypted = "media/burger_decrypted.jpg"
+def aes_gcm_encrypt_with_password(plaintext, password):
+    """
+    Encrypts plaintext using AES-256-GCM with password-based key derivation
+    Includes authentication tag to detect tampering/corruption
+    Returns: base64 encoded string containing nonce + tag + ciphertext
+    """
+    key = derive_key_from_password(password)
+    cipher = AES.new(key, AES.MODE_GCM)
+    
+    # Encrypt and generate authentication tag
+    ciphertext, tag = cipher.encrypt_and_digest(plaintext.encode())
+    
+    # Combine nonce (16 bytes) + tag (16 bytes) + ciphertext
+    encrypted_data = cipher.nonce + tag + ciphertext
+    
+    # Return as base64 for easy storage
+    return base64.b64encode(encrypted_data).decode('utf-8')
 
-# Encrypt file
-with open(input_file, "rb") as f:
-    file_data = f.read()
-
-key, nonce, ciphertext = aes_ctr_encrypt(file_data)
-save_ciphertext(output_encrypted, nonce, ciphertext)
-print(f"File encrypted: {output_encrypted}")
-
-# Decrypt file
-nonce_loaded, ciphertext_loaded = load_ciphertext(output_encrypted)
-decrypted_file_data = aes_ctr_decrypt(ciphertext_loaded, key, nonce_loaded)
-
-with open(output_decrypted, "wb") as f:
-    f.write(decrypted_file_data)
-print(f"File decrypted: {output_decrypted}")
+def aes_gcm_decrypt_with_password(encrypted_data, password):
+    """
+    Decrypts AES-256-GCM ciphertext with password-based key derivation
+    Verifies authentication tag - raises exception if corrupted/tampered
+    Returns: decrypted plaintext string
+    """
+    try:
+        key = derive_key_from_password(password)
+        
+        # Decode from base64
+        data = base64.b64decode(encrypted_data)
+        
+        # Extract components
+        nonce = data[:16]       # GCM nonce is 16 bytes
+        tag = data[16:32]       # Authentication tag is 16 bytes
+        ciphertext = data[32:]  # Rest is ciphertext
+        
+        # Decrypt and verify
+        cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
+        plaintext = cipher.decrypt_and_verify(ciphertext, tag)
+        
+        return plaintext.decode('utf-8')
+    except (ValueError, KeyError) as e:
+        raise Exception("Decryption failed: Invalid password or corrupted data")
